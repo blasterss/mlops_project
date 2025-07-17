@@ -9,7 +9,7 @@ from datetime import datetime
 
 
 with DAG(
-    "first_dag",
+    "titanic_pipeline",
     start_date=datetime(2025, 1, 1),
     schedule="@daily",
     catchup=False
