@@ -1,3 +1,4 @@
 .venv
 info.txt
 .env
+__pycache__
