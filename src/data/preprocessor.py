@@ -12,12 +12,10 @@ class DataPreprocessor:
         """Perform initial data cleaning"""
         df = df.copy()
         
-        # Удаляем ненужные колонки
         df.drop(['PassengerId', 'Name', 'Cabin', 'Ticket'], 
                 axis=1, 
                 inplace=True)
         
-        # Заполняем пропуски
         fill_values = {'female': 28, 'male': 31}
         df['Age'] = df['Age'].fillna(df['Sex'].map(fill_values))
         df['Embarked'] = df['Embarked'].fillna('S')
@@ -50,13 +48,11 @@ class DataPreprocessor:
         numerical_cols: List[str]
     ) -> Tuple[pd.DataFrame, ColumnTransformer]:
         """Complete preprocessing pipeline"""
-        # 1. Basic cleaning
+
         df_clean = DataPreprocessor._basic_clean(df)
         
-        # 2. Encode categorical
         df_encoded = DataPreprocessor._encode_categorical(df_clean)
         
-        # 3. Build preprocessor
         preprocessor = DataPreprocessor.build_preprocessor(numerical_cols)
         
         return df_encoded, preprocessor
