@@ -16,8 +16,8 @@ class DataPreprocessor:
                 axis=1, 
                 inplace=True)
         
-        fill_values = {'female': 28, 'male': 31}
-        df['Age'] = df['Age'].fillna(df['Sex'].map(fill_values))
+        mean_age = df.groupby('Sex')['Age'].mean().round()
+        df['Age'] = df['Age'].fillna(df['Sex'].map(mean_age))
         df['Embarked'] = df['Embarked'].fillna('S')
         
         return df
