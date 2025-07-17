@@ -21,3 +21,18 @@ with mlflow.start_run():
     mlflow.end_run()
 
 model.fit()
+
+from src.utils.config import Config
+from src.data.loader import DataLoader
+from src.models.model_factory import ModelFactory
+import mlflow
+
+def main():
+    mlflow.set_tracking_uri(Config.MLFLOW_TRACKING_URI)
+    mlflow.set_experiment(Config.MLFLOW_EXPERIMENT_NAME)
+    
+    # Весь pipeline из DAG, но в виде скрипта
+    # ...
+
+if __name__ == "__main__":
+    main()
