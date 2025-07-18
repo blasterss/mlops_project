@@ -18,21 +18,32 @@ default_args = {
     'retries': 1
 }
 
-def load_and_preprocess_data(is_train: bool, **kwargs) -> Dict[str, Any]:
+def load_and_preprocess_data(is_train: bool, **context) -> Dict[str, Any]:
     """Обработка с проверкой данных"""
-    ti = kwargs['ti']
+    ti = context['ti']
+
+    dataset_type = "train" if is_train else "test"
+    ti.log.info(f"Starting loading {dataset_type} data") 
+
     try:
         df = DataLoader.load_data(is_train=is_train)
+        ti.log.info(f"Loaded {dataset_type} data. Shape: {df.shape}")
+
         df_preprocessed = DataPreprocessor.full_preprocess(df)
+        ti.log.info(f"Preprocessed {dataset_type} data. New shape: {df_preprocessed.shape}")
+
         ti.xcom_push(key='columns', value=list(df_preprocessed.columns))
         return {'data': df_preprocessed.to_dict('list')}
     except Exception as e:
+        ti.log.error(f"Error processing {dataset_type} data: {str(e)}")
         ti.xcom_push(key='error', value=str(e))
         raise
 
-def split_data(**kwargs) -> Dict[str, Any]:
+def split_data(**context) -> Dict[str, Any]:
     """Разделение данных с валидацией"""
-    ti = kwargs['ti']
+    ti = context['ti']
+    ti.log.info("Starting data splitting")
+
     train_data = ti.xcom_pull(task_ids='prep_train_data', key='data')
     columns = ti.xcom_pull(task_ids='prep_train_data', key='columns')
     
@@ -47,9 +58,11 @@ def split_data(**kwargs) -> Dict[str, Any]:
         'y_val': y_val.tolist()
     }
 
-def train_model_func(model_name: str, **kwargs):
+def train_model_func(model_name: str, **context):
     """Обучение с обработкой ошибок"""
-    ti = kwargs['ti']
+    ti = context['ti']
+    ti.log.info(f"Starting training {model_name} model")
+
     data = ti.xcom_pull(task_ids='split_data')
     
     try:
@@ -61,12 +74,15 @@ def train_model_func(model_name: str, **kwargs):
         with mlflow.start_run(run_name=f"{model_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"):
             model = ModelFactory.create_model(model_name)
             params = model.get_parameters()
+            ti.log.info(f"Model params: {params}")
+
             model.set_parameters(params)
             model.fit(X_train, y_train)
             
             predictions = model.predict(X_val)
             accuracy = accuracy_score(y_val, predictions)
             
+            ti.log.info(f"Model trained. Validation accuracy: {accuracy:.4f}")
             mlflow.log_params(params)
             mlflow.log_metric("accuracy", accuracy)
             mlflow.sklearn.log_model(model, "model")
@@ -95,10 +111,11 @@ def load_best_model_from_mlflow(best_model_type: str):
 
     return model
         
-
-def get_submission_file(**kwargs):
+def get_submission_file(**context):
     """Генерация submission файла"""
-    ti = kwargs['ti']
+    ti = context['ti']
+    ti.log.info("Generating submission file")
+    
     test_data = ti.xcom_pull(task_ids='prep_test_data', key='data')
     columns = ti.xcom_pull(task_ids='prep_test_data', key='columns')
     
@@ -109,6 +126,7 @@ def get_submission_file(**kwargs):
     gb_accuracy = ti.xcom_pull(task_ids='train_model_2', key='gradient_boosting_accuracy')
     
     best_model_type = "random_forest" if rf_accuracy > gb_accuracy else "gradient_boosting"
+    ti.log.info(f"Best model: {best_model_type} (RF: {rf_accuracy:.4f}, GB: {gb_accuracy:.4f})")
     
     # Загружаем модель из MLflow
     model = load_best_model_from_mlflow(best_model_type)
@@ -119,12 +137,13 @@ def get_submission_file(**kwargs):
     submission = pd.DataFrame({'PassengerId': df_test['PassengerId'], 'Survived': predictions})
     submission.to_csv(Config.SUBMISSION_FILE, index=False)
     
+    ti.log.info(f"Submission saved to: {Config.SUBMISSION_FILE}")
     ti.xcom_push(key='best_model', value=best_model_type)
 
 with DAG(
     "titanic_pipeline",
     default_args=default_args,
-    schedule_interval="@daily",
+    schedule="@daily",
     catchup=False,
     tags=["mlops"]
 ) as dag:
@@ -133,21 +152,18 @@ with DAG(
         prep_train_data = PythonOperator(
             task_id="prep_train_data",
             python_callable=load_and_preprocess_data,
-            op_args=[True],
-            provide_context=True
+            op_args=[True]
         )
         
         prep_test_data = PythonOperator(
             task_id="prep_test_data",
             python_callable=load_and_preprocess_data,
-            op_args=[False],
-            provide_context=True
+            op_args=[False]
         )
     
     split_data_task = PythonOperator(
         task_id="split_data",
         python_callable=split_data,
-        provide_context=True
     )
     
     with TaskGroup("model_training") as train_group:
@@ -155,20 +171,17 @@ with DAG(
             task_id="train_model_1",
             python_callable=train_model_func,
             op_args=["random_forest"],
-            provide_context=True
         )
         
         train_model_2_task = PythonOperator(
             task_id="train_model_2",
             python_callable=train_model_func,
             op_args=["gradient_boosting"],
-            provide_context=True
         )
     
     get_submission = PythonOperator(
         task_id="get_submission",
         python_callable=get_submission_file,
-        provide_context=True
     )
     
     # Порядок выполнения задач
