@@ -22,28 +22,18 @@ def load_and_preprocess_data(is_train: bool, **context) -> Dict[str, Any]:
     """Обработка с проверкой данных"""
     ti = context['ti']
 
-    dataset_type = "train" if is_train else "test"
-    ti.log.info(f"Starting loading {dataset_type} data") 
-
     try:
         df = DataLoader.load_data(is_train=is_train)
-        ti.log.info(f"Loaded {dataset_type} data. Shape: {df.shape}")
-
         df_preprocessed = DataPreprocessor.full_preprocess(df)
-        ti.log.info(f"Preprocessed {dataset_type} data. New shape: {df_preprocessed.shape}")
-
         ti.xcom_push(key='columns', value=list(df_preprocessed.columns))
         return {'data': df_preprocessed.to_dict('list')}
     except Exception as e:
-        ti.log.error(f"Error processing {dataset_type} data: {str(e)}")
         ti.xcom_push(key='error', value=str(e))
         raise
 
 def split_data(**context) -> Dict[str, Any]:
     """Разделение данных с валидацией"""
     ti = context['ti']
-    ti.log.info("Starting data splitting")
-
     train_data = ti.xcom_pull(task_ids='prep_train_data', key='data')
     columns = ti.xcom_pull(task_ids='prep_train_data', key='columns')
     
@@ -61,8 +51,6 @@ def split_data(**context) -> Dict[str, Any]:
 def train_model_func(model_name: str, **context):
     """Обучение с обработкой ошибок"""
     ti = context['ti']
-    ti.log.info(f"Starting training {model_name} model")
-
     data = ti.xcom_pull(task_ids='split_data')
     
     try:
@@ -74,15 +62,12 @@ def train_model_func(model_name: str, **context):
         with mlflow.start_run(run_name=f"{model_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"):
             model = ModelFactory.create_model(model_name)
             params = model.get_parameters()
-            ti.log.info(f"Model params: {params}")
-
             model.set_parameters(params)
             model.fit(X_train, y_train)
             
             predictions = model.predict(X_val)
             accuracy = accuracy_score(y_val, predictions)
             
-            ti.log.info(f"Model trained. Validation accuracy: {accuracy:.4f}")
             mlflow.log_params(params)
             mlflow.log_metric("accuracy", accuracy)
             mlflow.sklearn.log_model(model, "model")
@@ -114,8 +99,6 @@ def load_best_model_from_mlflow(best_model_type: str):
 def get_submission_file(**context):
     """Генерация submission файла"""
     ti = context['ti']
-    ti.log.info("Generating submission file")
-    
     test_data = ti.xcom_pull(task_ids='prep_test_data', key='data')
     columns = ti.xcom_pull(task_ids='prep_test_data', key='columns')
     
@@ -126,7 +109,6 @@ def get_submission_file(**context):
     gb_accuracy = ti.xcom_pull(task_ids='train_model_2', key='gradient_boosting_accuracy')
     
     best_model_type = "random_forest" if rf_accuracy > gb_accuracy else "gradient_boosting"
-    ti.log.info(f"Best model: {best_model_type} (RF: {rf_accuracy:.4f}, GB: {gb_accuracy:.4f})")
     
     # Загружаем модель из MLflow
     model = load_best_model_from_mlflow(best_model_type)
@@ -137,7 +119,6 @@ def get_submission_file(**context):
     submission = pd.DataFrame({'PassengerId': df_test['PassengerId'], 'Survived': predictions})
     submission.to_csv(Config.SUBMISSION_FILE, index=False)
     
-    ti.log.info(f"Submission saved to: {Config.SUBMISSION_FILE}")
     ti.xcom_push(key='best_model', value=best_model_type)
 
 with DAG(
