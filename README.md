@@ -67,8 +67,8 @@ MLFLOW_EXPERIMENT_NAME = "titanic_survival"
 ## Installation
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/titanic-ml-pipeline.git
-cd titanic-ml-pipeline
+git clone https://github.com/blasterss/mlops_project.git
+cd mlops_project
 ```
 
 2. Install dependencies
