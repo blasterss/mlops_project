@@ -4,52 +4,102 @@ from optuna.trial import Trial
 from typing import Dict, Any
 
 class AbstractModel(ABC):
-    """Abstract base class for all ML models with hyperparameter tuning."""
+    """
+    Abstract base class for machine learning models with hyperparameter tuning support.
+    
+    Provides common interface for:
+    - Hyperparameter optimization with Optuna
+    - Model training and prediction
+    - Parameter logging to MLflow
+    """
     
     def __init__(self):
         super().__init__()
-        self.model = None
+        self.model = None  # Will be initialized in concrete subclasses
 
     @staticmethod
     @abstractmethod
-    def get_parameters(trial: Trial
-                       ) -> Dict[str, Any]:
-        """Get hyperparameters for the model from Optuna trial."""
+    def get_parameters(trial: Trial) -> Dict[str, Any]:
+        """
+        Define hyperparameter search space for Optuna optimization.
+        
+        Args:
+            trial: Optuna trial object for parameter suggestions
+            
+        Returns:
+            Dictionary of parameter names and their suggested values
+        """
         pass
 
-    def set_parameters(self, params: Dict[str, Any]
-                       ) -> None:
-        """Set hyperparameters for the model."""
+    def set_parameters(self, params: Dict[str, Any]) -> None:
+        """
+        Apply hyperparameters to the model.
+        
+        Args:
+            params: Dictionary of parameter names and values
+        """
         self.model.set_params(**params)
 
-    def fit(self, X, y
-            ) -> None:
-        """Train the model on given data."""
+    def fit(self, X, y) -> None:
+        """
+        Train the model on given data.
+        
+        Args:
+            X: Feature matrix
+            y: Target values
+        """
         self.model.fit(X, y)
 
-    def predict(self, X
-                ):
-        """Make predictions on new data."""
+    def predict(self, X):
+        """
+        Generate predictions for new data.
+        
+        Args:
+            X: Feature matrix for prediction
+            
+        Returns:
+            Array of predictions
+        """
         return self.model.predict(X)
 
-    def log_parameters(self, run
-                       ) -> None:
-        """Log model parameters to MLflow."""
+    def log_parameters(self, run) -> None:
+        """
+        Log all model parameters to MLflow.
+        
+        Args:
+            run: MLflow active run
+        """
         params = self.model.get_params()
         for param, value in params.items():
             run.log_param(param, value)
 
+
 class RFCModel(AbstractModel):
-    """Random Forest Classifier with Optuna hyperparameter optimization."""
+    """
+    Random Forest Classifier with Optuna hyperparameter optimization.
+    
+    Hyperparameter search space includes:
+    - Tree structure parameters (max_depth, min_samples_split, etc.)
+    - Ensemble parameters (n_estimators)
+    - Feature selection parameters (max_features)
+    """
     
     def __init__(self):
         super().__init__()
-        self.model = RandomForestClassifier()
+        self.model = RandomForestClassifier(random_state=42)
 
     @staticmethod
     def get_parameters(trial: Trial
                        ) -> Dict[str, Any]:
-        """Get hyperparameters for RandomForest from Optuna trial."""
+        """
+        Define hyperparameter search space for Random Forest.
+        
+        Returns:
+            Dictionary of parameter suggestions including:
+            - n_estimators: Number of trees (50-500)
+            - max_depth: Maximum tree depth (3-15)
+            - Various split/leaf constraints
+        """
         return {
             'n_estimators': trial.suggest_int('n_estimators', 50, 500),
             'max_depth': trial.suggest_int('max_depth', 3, 15),
@@ -61,16 +111,32 @@ class RFCModel(AbstractModel):
         }
 
 class GBCModel(AbstractModel):
-    """Gradient Boosting Classifier with Optuna hyperparameter optimization."""
+    """
+    Gradient Boosting Classifier with Optuna hyperparameter optimization.
+    
+    Hyperparameter search space includes:
+    - Boosting parameters (learning_rate, n_estimators)
+    - Tree structure parameters
+    - Regularization parameters
+    - Early stopping configuration
+    """
     
     def __init__(self):
         super().__init__()
-        self.model = GradientBoostingClassifier()
+        self.model = GradientBoostingClassifier(random_state=42)
 
     @staticmethod
     def get_parameters(trial: Trial
                        ) -> Dict[str, Any]:
-        """Get hyperparameters for GradientBoosting from Optuna trial."""
+        """
+        Define hyperparameter search space for Gradient Boosting.
+        
+        Returns:
+            Dictionary of parameter suggestions including:
+            - learning_rate: Shrinkage factor (0.01-0.2)
+            - n_estimators: Number of boosting stages (50-500)
+            - Various regularization parameters
+        """
         return {
             'n_estimators': trial.suggest_int('n_estimators', 50, 500),
             'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.2, log=True),

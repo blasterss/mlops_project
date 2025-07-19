@@ -2,6 +2,13 @@ import os
 from pathlib import Path
 
 class Config:
+    """
+    Central configuration class for the Titanic survival prediction project.
+    
+    Provides paths to data files and MLflow tracking configuration.
+    All paths are resolved relative to the project root directory.
+    """
+    
     BASE_DIR = Path(__file__).resolve().parent.parent.parent
     DATA_DIR = BASE_DIR / "data"
     SUBMISSION_DIR = BASE_DIR / "submissions"

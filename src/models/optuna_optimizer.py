@@ -9,7 +9,15 @@ from .model import AbstractModel
 from sklearn.base import BaseEstimator
 
 class OptunaOptimizer:
-    """Класс для оптимизации гиперпараметров с помощью Optuna"""
+    """
+    A class for hyperparameter optimization using Optuna.
+    
+    Provides functionality to:
+    - Perform hyperparameter optimization studies
+    - Create objective functions for model tuning
+    - Track optimization progress
+    - Retrieve best performing models
+    """
     
     def __init__(self,
                  direction: str = "maximize",
@@ -17,11 +25,16 @@ class OptunaOptimizer:
                  storage: Optional[str] = None,
                  load_if_exists: bool = True):
         """
+        Initialize the Optuna optimizer.
+        
         Args:
-            direction: Направление оптимизации ("maximize" или "minimize")
-            study_name: Имя исследования (для сохранения в storage)
-            storage: Путь для сохранения исследований (например, "sqlite:///optuna.db")
-            load_if_exists: Загружать существующее исследование если существует
+            direction: Optimization direction ("maximize" or "minimize")
+            study_name: Name of the study (for storage and tracking)
+            storage: Database URL for storing studies (e.g., "sqlite:///optuna.db")
+            load_if_exists: Whether to continue existing study if found
+            
+        Example:
+            >>> optimizer = OptunaOptimizer(direction="maximize", study_name="rf_optimization")
         """
         self.study = optuna.create_study(
             direction=direction,
@@ -38,13 +51,20 @@ class OptunaOptimizer:
                  timeout: Optional[int] = 3600,
                  callbacks: Optional[list] = None) -> None:
         """
-        Запуск оптимизации
+        Run the hyperparameter optimization study.
         
         Args:
-            objective_func: Функция для оптимизации
-            n_trials: Максимальное количество trials
-            timeout: Максимальное время оптимизации в секундах
-            callbacks: Список callback функций
+            objective_func: Objective function to optimize
+            n_trials: Maximum number of trials to run
+            timeout: Maximum time in seconds for optimization
+            callbacks: List of callback functions to execute after each trial
+            
+        Raises:
+            optuna.exceptions.StorageInternalError: If database connection fails
+            RuntimeError: If optimization encounters critical errors
+            
+        Example:
+            >>> optimizer.optimize(objective_func, n_trials=50, timeout=1800)
         """
         callbacks = callbacks or []
         callbacks.append(self._log_progress_callback())
@@ -67,21 +87,24 @@ class OptunaOptimizer:
                         scoring: str = 'accuracy',
                         cv: int = 3) -> Callable:
         """
-        Создает функцию для оптимизации
+        Create an objective function for Optuna optimization.
         
         Args:
-            model: Модель с методами get_parameters/set_parameters или sklearn-модель
-            X: Признаки
-            y: Целевая переменная
-            scoring: Метрика для оптимизации
-            cv: Количество фолдов для кросс-валидации
+            model: Model instance to optimize (AbstractModel or scikit-learn estimator)
+            X: Feature matrix for training
+            y: Target values
+            scoring: Evaluation metric to optimize
+            cv: Number of cross-validation folds
             
         Returns:
-            Функция objective для optuna
+            A callable objective function for Optuna
+            
+        Example:
+            >>> objective = optimizer.create_objective(model, X_train, y_train)
         """
         def objective(trial: Trial):
             try:
-                # Для совместимости с AbstractModel и sklearn
+                # Handle both AbstractModel and sklearn estimators
                 if hasattr(model, 'get_parameters'):
                     params = model.get_parameters(trial)
                     model.set_parameters(params)
@@ -93,6 +116,7 @@ class OptunaOptimizer:
                             params[name] = param.suggest(trial)
                     estimator = model.set_params(**params)
                 
+                # Perform cross-validation
                 scores = cross_val_score(estimator, X, y, cv=cv, scoring=scoring)
                 return scores.mean()
                 
@@ -103,7 +127,7 @@ class OptunaOptimizer:
         return objective
 
     def _log_progress_callback(self) -> Callable:
-        """Callback для логирования прогресса"""
+        """Create a callback function for logging optimization progress."""
         def callback(study: Study, 
                      trial: Trial):
             if study.best_trial.number == trial.number:
@@ -117,7 +141,18 @@ class OptunaOptimizer:
     def get_best_model(self,
                        model: Union[AbstractModel, BaseEstimator]
                        ) -> Union[AbstractModel, BaseEstimator]:
-        """Возвращает модель с лучшими параметрами"""
+        """
+        Return a model instance configured with the best parameters found.
+        
+        Args:
+            model: Model instance to configure with best parameters
+            
+        Returns:
+            Model instance with optimized parameters
+            
+        Example:
+            >>> best_model = optimizer.get_best_model(model)
+        """
         if hasattr(model, 'set_parameters'):
             model.set_parameters(self.study.best_params)
             return model
