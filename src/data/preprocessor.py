@@ -2,14 +2,14 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.compose import ColumnTransformer
 import pandas as pd
-from typing import Tuple, List
+from typing import List
 
 class DataPreprocessor:
     @staticmethod
     def _basic_clean(
         df: pd.DataFrame
     ) -> pd.DataFrame:
-        """Perform initial data cleaning"""
+        """Базовая очистка данных"""
         df = df.copy()
         
         df.drop(['PassengerId', 'Name', 'Cabin', 'Ticket'], 
@@ -26,14 +26,12 @@ class DataPreprocessor:
     def _encode_categorical(
         df: pd.DataFrame
     ) -> pd.DataFrame:
-        """Convert categorical features to numerical"""
         return pd.get_dummies(df, drop_first=True, dtype=int)
 
     @staticmethod
     def build_preprocessor(
         numerical_cols: List[str]
     ) -> ColumnTransformer:
-        """Create sklearn preprocessing pipeline for numerical features"""
         num_pipeline = Pipeline([
             ('scaler', StandardScaler())
         ])
@@ -47,7 +45,7 @@ class DataPreprocessor:
         df: pd.DataFrame,
         # numerical_cols: List[str]
     ) -> pd.DataFrame:
-        """Complete preprocessing pipeline"""
+        """Полный пайплайн подготовки данных"""
 
         df_clean = DataPreprocessor._basic_clean(df)
         

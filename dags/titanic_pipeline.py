@@ -5,6 +5,8 @@ from src.utils.config import Config
 from src.models.optuna_optimizer import OptunaOptimizer
 
 import pandas as pd
+import mlflow
+from mlflow.models.signature import infer_signature
 
 from airflow.sdk import DAG
 from airflow.providers.standard.operators.python import PythonOperator
@@ -33,10 +35,6 @@ def load_and_preprocess_data(is_train: bool, **context):
 def train_model_func(model_name: str, **context):
     """Обучение с обработкой ошибок"""
     ti = context['ti']
-    
-    import mlflow
-    mlflow.set_tracking_uri(Config.MLFLOW_TRACKING_URI)
-    mlflow.set_experiment(Config.MLFLOW_EXPERIMENT_NAME)
 
     train_data = ti.xcom_pull(task_ids='data_preparation.prep_train_data', key='return_value')
     columns = ti.xcom_pull(task_ids='data_preparation.prep_train_data', key='columns')
@@ -50,16 +48,27 @@ def train_model_func(model_name: str, **context):
         objective = optimizer.create_objective(model, X, y)
         optimizer.optimize(objective, n_trials=30)
         
-        # Получение лучшей метрики
-        best_accuracy = optimizer.study.best_value
-        
         # Логирование
-        with mlflow.start_run():
+        with mlflow.start_run() as run:
+            best_model = optimizer.get_best_model(model)
+            best_model.fit(X, y)
+
+            best_accuracy = optimizer.study.best_value
+            predictions = best_model.predict(X)
+
             mlflow.log_metric("val_accuracy", best_accuracy)
             mlflow.log_params(optimizer.study.best_params)
-            mlflow.sklearn.log_model(optimizer.get_best_model(model), model_name)
-            
-        ti.xcom_push(key=f'{model_name}_accuracy', value=best_accuracy)
+            signature = infer_signature(X, predictions)
+
+            mlflow.sklearn.log_model(
+                best_model, 
+                name=model_name, 
+                signature=signature,
+                input_example=X.iloc[:1]
+            )
+
+            ti.xcom_push(key=f"{model_name}_run_id", value=run.info.run_id)
+            ti.xcom_push(key=f'{model_name}_accuracy', value=best_accuracy)
             
     except Exception as e:
         ti.xcom_push(key=f'{model_name}_error', value=str(e))
@@ -68,7 +77,7 @@ def train_model_func(model_name: str, **context):
 def get_submission_file(**context):
     """Генерация submission файла"""
     ti = context['ti']
-    test_data = ti.xcom_pull(task_ids='data_preparation.prep_test_data', key='data')
+    test_data = ti.xcom_pull(task_ids='data_preparation.prep_test_data', key='return_value')
     columns = ti.xcom_pull(task_ids='data_preparation.prep_test_data', key='columns')
     
     df_test = pd.DataFrame(test_data, columns=columns)
@@ -77,17 +86,22 @@ def get_submission_file(**context):
     rf_accuracy = ti.xcom_pull(task_ids='model_training.train_model_1', key='random_forest_accuracy')
     gb_accuracy = ti.xcom_pull(task_ids='model_training.train_model_2', key='gradient_boosting_accuracy')
     
-    best_model_type = "random_forest" if rf_accuracy > gb_accuracy else "gradient_boosting"
-    
     # Загружаем модель из MLflow
-    import mlflow
-    model = mlflow.sklearn.load_model(f"runs:/{mlflow.active_run().info.run_id}/{best_model_type}")
+    rf_run_id = ti.xcom_pull(task_ids='model_training.train_model_1', key='random_forest_run_id')
+    gb_run_id = ti.xcom_pull(task_ids='model_training.train_model_2', key='gradient_boosting_run_id')
+    
+    if rf_accuracy > gb_accuracy:
+        model = mlflow.sklearn.load_model(f"runs:/{rf_run_id}/random_forest")
+    else:
+        model = mlflow.sklearn.load_model(f"runs:/{gb_run_id}/gradient_boosting")
     
     predictions = model.predict(df_test)
     
     # Сохраняем submission.csv
-    submission = pd.DataFrame({'PassengerId': df_test['PassengerId'], 'Survived': predictions})
-    submission.to_csv(Config.SUBMISSION_FILE, index=False)
+    submission = DataLoader.load_sub_data()
+    submission['Survived'] = predictions
+
+    submission.to_csv(Config.SUBMISSION_DEST_FILE, index=False)
     
 with DAG(
     "titanic_pipeline",
@@ -97,6 +111,8 @@ with DAG(
     tags=["mlops"]
 ) as dag:
     
+    mlflow.set_tracking_uri(Config.MLFLOW_TRACKING_URI)
+    mlflow.set_experiment(Config.MLFLOW_EXPERIMENT_NAME)
     with TaskGroup("data_preparation") as data_prep_group:
         prep_train_data = PythonOperator(
             task_id="prep_train_data",

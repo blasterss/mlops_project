@@ -54,9 +54,7 @@ class OptunaOptimizer:
                 objective_func,
                 n_trials=n_trials,
                 timeout=timeout,
-                n_jobs=-1,
-                callbacks=callbacks,
-                gc_after_trial=True
+                callbacks=callbacks
             )
         except Exception as e:
             self.logger.error(f"Optimization failed: {str(e)}")

@@ -5,8 +5,13 @@ class DataLoader:
     
     @staticmethod
     def load_data(is_train: bool = True) -> pd.DataFrame:
-        """Load train or test dataset"""
+        """Загрузка тренировочных и тестовых данных"""
         return pd.read_csv(Config.TRAIN_DATA) if is_train else pd.read_csv(Config.TEST_DATA)
+    
+    @staticmethod
+    def load_sub_data() -> pd.DataFrame:
+        """Загрузка примера submission файда"""
+        return pd.read_csv(Config.SUBMISSION_SOURCE)
     
     @staticmethod
     def split_data(
@@ -14,7 +19,7 @@ class DataLoader:
         target: str,
         test_size: float = 0.2
     ):
-        """Split data into train/test"""
+        """Разделение данных на тренировочную/тестовую выборки"""
         from sklearn.model_selection import train_test_split
         X = df.drop(columns=[target])
         y = df[target]
