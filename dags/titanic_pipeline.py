@@ -101,7 +101,7 @@ def get_submission_file(**context):
     submission = DataLoader.load_sub_data()
     submission['Survived'] = predictions
 
-    submission.to_csv(Config.SUBMISSION_DEST_FILE, index=False)
+    submission.to_csv(Config.SUBMISSION_DEST, index=False)
     
 with DAG(
     "titanic_pipeline",
