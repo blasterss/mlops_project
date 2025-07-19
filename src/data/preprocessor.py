@@ -45,14 +45,14 @@ class DataPreprocessor:
     @staticmethod
     def full_preprocess(
         df: pd.DataFrame,
-        numerical_cols: List[str]
-    ) -> Tuple[pd.DataFrame, ColumnTransformer]:
+        # numerical_cols: List[str]
+    ) -> pd.DataFrame:
         """Complete preprocessing pipeline"""
 
         df_clean = DataPreprocessor._basic_clean(df)
         
         df_encoded = DataPreprocessor._encode_categorical(df_clean)
         
-        preprocessor = DataPreprocessor.build_preprocessor(numerical_cols)
+        # preprocessor = DataPreprocessor.build_preprocessor(numerical_cols)
         
-        return df_encoded, preprocessor
+        return df_encoded #, preprocessor

@@ -3,3 +3,4 @@ info.txt
 airflow
 .env
 __pycache__
+mlruns

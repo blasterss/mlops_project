@@ -2,6 +2,9 @@ from src.data.loader import DataLoader
 from src.data.preprocessor import DataPreprocessor
 from src.models.model_factory import ModelFactory
 from src.utils.config import Config
+from src.utils.mlflow_logger import MLflowLogger
+from src.utils.optuna_optimizer import OptunaOptimizer
+
 from typing import Dict, Any
 import pandas as pd
 from sklearn.metrics import accuracy_score
@@ -18,7 +21,7 @@ default_args = {
     'retries': 1
 }
 
-def load_and_preprocess_data(is_train: bool, **context) -> Dict[str, Any]:
+def load_and_preprocess_data(is_train: bool, **context):
     """Обработка с проверкой данных"""
     ti = context['ti']
 
@@ -26,7 +29,7 @@ def load_and_preprocess_data(is_train: bool, **context) -> Dict[str, Any]:
         df = DataLoader.load_data(is_train=is_train)
         df_preprocessed = DataPreprocessor.full_preprocess(df)
         ti.xcom_push(key='columns', value=list(df_preprocessed.columns))
-        return {'data': df_preprocessed.to_dict('list')}
+        return df_preprocessed.to_dict('list')
     except Exception as e:
         ti.xcom_push(key='error', value=str(e))
         raise
@@ -34,8 +37,8 @@ def load_and_preprocess_data(is_train: bool, **context) -> Dict[str, Any]:
 def split_data(**context) -> Dict[str, Any]:
     """Разделение данных с валидацией"""
     ti = context['ti']
-    train_data = ti.xcom_pull(task_ids='prep_train_data', key='data')
-    columns = ti.xcom_pull(task_ids='prep_train_data', key='columns')
+    train_data = ti.xcom_pull(task_ids='data_preparation.prep_train_data', key='return_value')
+    columns = ti.xcom_pull(task_ids='data_preparation.prep_train_data', key='columns')
     
     df_train = pd.DataFrame(train_data, columns=columns)
     
@@ -52,6 +55,9 @@ def train_model_func(model_name: str, **context):
     """Обучение с обработкой ошибок"""
     ti = context['ti']
     data = ti.xcom_pull(task_ids='split_data')
+
+    logger = MLflowLogger("titanic_survival")
+    optimizer = OptunaOptimizer()
     
     try:
         X_train = pd.DataFrame(data['X_train'])
@@ -59,20 +65,28 @@ def train_model_func(model_name: str, **context):
         y_train = pd.Series(data['y_train'])
         y_val = pd.Series(data['y_val'])
         
-        with mlflow.start_run(run_name=f"{model_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"):
-            model = ModelFactory.create_model(model_name)
-            params = model.get_parameters()
-            model.set_parameters(params)
-            model.fit(X_train, y_train)
+        model = ModelFactory.create_model(model_name)
+        objective = optimizer.create_objective(
+            model,
+            X_train, 
+            y_train
+        )
+        optimizer.optimize(objective, n_trials=30)
+
+        with logger.start_run(run_name=f"{model_name}_best"):
+            best_model = ModelFactory.create_model(model_name)
+            best_model.set_parameters(optimizer.study.best_params)
+            best_model.fit(X_val, y_val)
+
+            y_pred = best_model.predict(X_val)
+            val_accuracy = accuracy_score(y_val, y_pred)
             
-            predictions = model.predict(X_val)
-            accuracy = accuracy_score(y_val, predictions)
+            # Логирование
+            best_model.log_to_mlflow()
+            logger.log_study(optimizer.study)
+            mlflow.log_metric("val_accuracy", val_accuracy)
             
-            mlflow.log_params(params)
-            mlflow.log_metric("accuracy", accuracy)
-            mlflow.sklearn.log_model(model, "model")
-            
-            ti.xcom_push(key=f'{model_name}_accuracy', value=accuracy)
+            ti.xcom_push(key=f'{model_name}_accuracy', value=val_accuracy)
             
     except Exception as e:
         ti.xcom_push(key=f'{model_name}_error', value=str(e))
@@ -99,14 +113,14 @@ def load_best_model_from_mlflow(best_model_type: str):
 def get_submission_file(**context):
     """Генерация submission файла"""
     ti = context['ti']
-    test_data = ti.xcom_pull(task_ids='prep_test_data', key='data')
-    columns = ti.xcom_pull(task_ids='prep_test_data', key='columns')
+    test_data = ti.xcom_pull(task_ids='data_preparation.prep_test_data', key='data')
+    columns = ti.xcom_pull(task_ids='data_preparation.prep_test_data', key='columns')
     
     df_test = pd.DataFrame(test_data, columns=columns)
     
     # Получаем лучшую модель по accuracy
-    rf_accuracy = ti.xcom_pull(task_ids='train_model_1', key='random_forest_accuracy')
-    gb_accuracy = ti.xcom_pull(task_ids='train_model_2', key='gradient_boosting_accuracy')
+    rf_accuracy = ti.xcom_pull(task_ids='model_training.train_model_1', key='random_forest_accuracy')
+    gb_accuracy = ti.xcom_pull(task_ids='model_training.train_model_2', key='gradient_boosting_accuracy')
     
     best_model_type = "random_forest" if rf_accuracy > gb_accuracy else "gradient_boosting"
     

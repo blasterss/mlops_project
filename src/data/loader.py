@@ -4,9 +4,9 @@ from ..utils.config import Config
 class DataLoader:
     
     @staticmethod
-    def load_data(train: bool = True) -> pd.DataFrame:
+    def load_data(is_train: bool = True) -> pd.DataFrame:
         """Load train or test dataset"""
-        return pd.read_csv(Config.TRAIN_DATA) if train else pd.read_csv(Config.TEST_DATA)
+        return pd.read_csv(Config.TRAIN_DATA) if is_train else pd.read_csv(Config.TEST_DATA)
     
     @staticmethod
     def split_data(
