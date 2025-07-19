@@ -4,3 +4,4 @@ airflow
 .env
 __pycache__
 mlruns
+mlflow.db
