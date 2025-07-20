@@ -47,6 +47,7 @@ mlops_project/
 ├── submissions/                # Prediction outputs
 ├── mlruns/                     # MLflow tracking data (hidden)
 ├── airflow/                    # Airflow home directory (hidden)
+├── media/                      # Media files
 └── README.md
 ```
 
@@ -94,3 +95,29 @@ mlflow server --backend-store-uri sqlite:///mlflow.db --default-artifact-root ./
 ```
 
 3. Access the Airflow web interface (typically at http://localhost:8080) and trigger the titanic_pipeline DAG.
+
+## Examples
+
+1. DAG in Airlfow server
+
+![airflow_dag](media/airflow.png)
+
+2. Graph of DAG
+
+![airflow_graph_dag](media/graph.png)
+
+3. Success of completing Dag
+
+![airflow_success_dag](media/success.png)
+
+4. Optuna logging while training model
+
+![airflow_log_optuna](media/optuna%20logging.png)
+
+5. MLflow experiments
+
+![mlflow_experiments](media/mlflow%20experiment.png)
+
+6. MLflow model description
+
+![mlflow_description](media/model.png)

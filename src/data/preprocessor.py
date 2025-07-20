@@ -39,6 +39,8 @@ class DataPreprocessor:
         mean_age = df.groupby('Sex')['Age'].mean().round()
         df['Age'] = df['Age'].fillna(df['Sex'].map(mean_age))
         
+        df['Fare'] = df['Fare'].fillna(df['Fare'].median())
+
         # Fill missing Embarked values with most common value
         df['Embarked'] = df['Embarked'].fillna('S')
         
